@@ -99,6 +99,7 @@ save_dir = '..'
 backup_css = 'backup.css'
 custom_css = 'custom.css'
 avatar_base = 'avatar'
+header_base = 'header'
 dir_index = 'index.html'
 tag_index_dir = 'tags'
 
@@ -711,6 +712,44 @@ def get_style(prev_archive: str | os.PathLike[str], no_get: bool, use_dns_check:
         return
 
 
+def match_header(name):
+    return name.startswith(header_base + '.')
+
+def get_header(prev_archive: str | os.PathLike[str], header_url: str, no_get: bool) -> None:
+    if prev_archive is not None:
+        # Copy old header, if present
+        header_matches = find_files(join(prev_archive, theme_dir), match_header)
+        src = next(header_matches, None)
+        if src is not None:
+            path_parts = (theme_dir, split(src)[-1])
+            cpy_res = maybe_copy_media(prev_archive, path_parts)
+            if cpy_res:
+                return  # We got the header
+    if no_get:
+        return  # Don't download the header
+
+    header_dest = header_fpath = open_file(lambda f: f, (theme_dir, header_base))
+
+    # Remove old headers
+    header_matches = find_files(theme_dir, match_header)
+    if next(header_matches, None) is not None:
+        return  # Do not clobber
+
+    def adj_bn(old_bn, f):
+        # Give it an extension
+        kind = filetype.guess(f)
+        if kind:
+            return header_fpath + '.' + kind.extension
+        return header_fpath
+
+    # Download the image
+    assert wget_retrieve is not None
+    try:
+        wget_retrieve(header_url, header_dest, adjust_basename=adj_bn)
+    except WGError as e:
+        e.log()
+
+
 # Copy media file, if present in prev_archive
 def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
     if prev_archive is None:
@@ -1229,8 +1268,9 @@ class TumblrBackup:
                 f.write('\n')
 
         def build_index():
-            logger.status('Getting avatar and style\r')
+            logger.status('Getting avatar, header and style\r')
             get_avatar(prev_archive, no_get=self.options.no_get)
+            get_header(prev_archive, blog['theme']['header_image'], no_get=self.options.no_get)
             get_style(prev_archive, no_get=self.options.no_get, use_dns_check=self.options.use_dns_check)
             if not have_custom_css:
                 save_style()
