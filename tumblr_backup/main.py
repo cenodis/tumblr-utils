@@ -1671,6 +1671,7 @@ class TumblrPost:
         ydl_options = {
             'outtmpl': join(self.media_folder, filetmpl),
             'quiet': True,
+            'noprogress': True,
             'restrictfilenames': True,
             'noplaylist': True,
             'continuedl': True,
