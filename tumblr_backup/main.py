@@ -1686,7 +1686,7 @@ class TumblrPost:
             return result
         except Exception as e:
             failed = True
-            logger.error("Error while downloading video. URL will be ignored in future posts.\n  URL: {}\n  Caused by: {}".format(youtube_url, repr(e))
+            logger.error("Error while downloading video. URL will be ignored in future posts.\n  URL: {}\n  Caused by: {}".format(youtube_url, repr(e)))
         finally:
             with videos_cond:
                 if failed:
