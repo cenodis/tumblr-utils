@@ -142,6 +142,10 @@ disablens_lock = threading.Lock()
 downloading_media: set[str] = set()
 downloading_media_cond = threading.Condition()
 
+downloading_videos: set[str] = set()
+failed_videos: set[str] = set()
+videos_cond = threading.Condition()
+
 
 def load_bs4(reason):
     sys.modules['soupsieve'] = ()  # type: ignore[assignment]
@@ -1664,6 +1668,34 @@ class TumblrPost:
         return content_str
 
     def get_youtube_url(self, youtube_url):
+        failed = False
+        
+        with videos_cond:
+            while youtube_url in downloading_videos:
+                videos_cond.wait()
+            if youtube_url in failed_videos:
+                logger.error("Ignoring video because a previous attempt at grabbing it failed.\n  URL: {}".format(youtube_url))
+                return ''
+            downloading_videos.add(youtube_url)
+        
+        try:
+            result = self.get_youtube_url_inner(youtube_url)
+            if not result:
+                failed = True
+                logger.error("Failed to download video. URL will be ignored in future posts.\n  URL: {}".format(youtube_url))
+            return result
+        except Exception as e:
+            failed = True
+            logger.error("Error while downloading video. URL will be ignored in future posts.\n  URL: {}\n  Caused by: {}".format(youtube_url, repr(e))
+        finally:
+            with videos_cond:
+                if failed:
+                    failed_videos.add(youtube_url)
+                downloading_videos.remove(youtube_url)
+                videos_cond.notify_all()
+                
+
+    def get_youtube_url_inner(self, youtube_url):
         # determine the media file name
         filetmpl = '%(id)s_%(uploader_id)s_%(title)s.%(ext)s'
         ydl_options = {
@@ -1691,6 +1723,8 @@ class TumblrPost:
         ydl.add_default_info_extractors()
         try:
             result = ydl.extract_info(youtube_url, download=False)
+            if result is None:
+                return ''
             media_filename = youtube_dl.utils.sanitize_filename(filetmpl % result, restricted=True)
         except Exception:
             return ''
